@@ -1,4 +1,5 @@
 # AutoStream - Social-to-Lead Agentic Workflow
+**Demo video:** <paste-your-google-drive-link-here-after-recording>
 
 This is my submission for the ServiceHive ML Internship assignment. It is a
 conversational AI agent for a fictional SaaS product called **AutoStream**
@@ -29,7 +30,7 @@ You need Python 3.9+ and a free Gemini API key from
 **1. Clone the repo and enter the folder**
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/Rushi9234/autostream-agent.git
 cd autostream-agent
 ```
 

@@ -101,7 +101,12 @@ _llm = None
 def get_llm():
     global _llm
     if _llm is None:
-        _llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0.2)
+        # max_retries=0: the underlying client defaults to retrying failed
+        # calls up to 6 times internally, with its own backoff -- stacked on
+        # top of invoke_llm()'s own retry loop below, a single quota/rate
+        # error could take minutes to finally surface instead of seconds.
+        # invoke_llm() is the one place that should own retry/backoff.
+        _llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0.2, max_retries=0)
     return _llm
 
 

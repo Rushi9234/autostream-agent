@@ -20,4 +20,8 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Run tests
-        run: pytest tests/ -v
+        # `python -m pytest` (not a bare `pytest`) prepends the repo root to
+        # sys.path -- without it, pytest can't find agent.py/rag.py/tools.py
+        # (they live at the repo root, not under tests/) since there's no
+        # tests/__init__.py. Matches how this is run locally.
+        run: python -m pytest tests/ -v

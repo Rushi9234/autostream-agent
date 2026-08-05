@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AutoStream Assistant</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <span class="rec-dot" aria-hidden="true"></span>
+      <span class="brand">AutoStream <span class="dim">Assistant</span></span>
+      <span class="topbar-spacer"></span>
+      <span class="status-pill"><span class="dot" aria-hidden="true"></span>agent online</span>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle color theme">theme</button>
+    </div>
+    <div class="ticks" aria-hidden="true"></div>
+
+    <div class="thread" id="thread" role="log" aria-live="polite"></div>
+
+    <div class="examples" id="examples">
+      <button class="example-chip" type="button">Hi, tell me about your pricing.</button>
+      <button class="example-chip" type="button">What's your refund policy?</button>
+      <button class="example-chip" type="button">I want to try the Pro plan for my YouTube channel.</button>
+    </div>
+
+    <form class="composer" id="composer">
+      <input id="input" type="text" placeholder="Ask about pricing, features, or say hi…" autocomplete="off" />
+      <button id="send" type="submit">Send</button>
+    </form>
+  </div>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>

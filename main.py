@@ -1,6 +1,10 @@
 """
 CLI entry point for the AutoStream agent.
 
+This is the simplest possible front-end for the graph in agent.py — a plain
+REPL loop, mainly so I could test the routing/RAG/lead-capture logic by hand
+before wiring up the FastAPI (api.py) and Gradio (app.py) front-ends.
+
 Run `python main.py` to start a REPL chat. Type 'exit' or 'quit' to leave.
 """
 
@@ -10,7 +14,7 @@ import uuid
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 
-from agent import build_graph
+from agent import build_graph, get_pending_lead_approval, resume_with_lead_decision
 
 
 def main():
@@ -79,6 +83,23 @@ def main():
         reply = result["messages"][-1].content
         intent = result.get("intent", "")
         print(f"\nAssistant [{intent}]: {reply}")
+
+        # If the graph paused at escalate_node, play the human-reviewer role
+        # right here (in a real deployment this would be a separate person
+        # using api.py's /approve endpoint, not the same terminal).
+        pending = get_pending_lead_approval(graph, config)
+        if pending:
+            lead_info = pending["lead_info"]
+            print("\n--- Human review required before this lead is captured ---")
+            print(f"  Name: {lead_info['name']}")
+            print(f"  Email: {lead_info['email']}")
+            print(f"  Platform: {lead_info['platform']}")
+            decision = input("  Approve this lead? [y/n]: ").strip().lower()
+            approved = decision.startswith("y")
+
+            result = resume_with_lead_decision(graph, config, approved)
+            reply = result["messages"][-1].content
+            print(f"\nAssistant [lead_review]: {reply}")
 
 
 if __name__ == "__main__":

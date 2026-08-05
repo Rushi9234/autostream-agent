@@ -15,3 +15,13 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Runtime data (regenerated locally, not shipped in the repo)
+leads.db
+checkpoints.sqlite*
+index/
+*.sqlite*
+.pytest_cache/
+
+# This code review PDF is local-only, not part of the project itself
+AutoStream_Code_Review_and_Upgrade_Roadmap.pdf

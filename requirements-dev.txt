@@ -1,0 +1,4 @@
+# Dev/test tooling. Not needed to run the agent itself — see requirements.txt.
+pytest>=8.0.0,<9.0.0
+black>=24.0.0,<25.0.0
+ruff>=0.6.0,<0.7.0

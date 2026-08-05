@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+leads.db
+checkpoints.sqlite
+index/
+.git/
+.pytest_cache/
+tests/

@@ -1,6 +1,8 @@
 """
-Runs the canonical conversation from the assignment spec automatically.
-Useful for a quick end-to-end test or for recording the demo video.
+Runs a canonical example conversation end-to-end automatically.
+
+Useful for a quick smoke test of the whole graph (routing -> RAG -> lead
+capture) without typing each turn by hand, or for recording a demo clip.
 """
 
 import os
@@ -10,7 +12,7 @@ import uuid
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 
-from agent import build_graph
+from agent import build_graph, get_pending_lead_approval, resume_with_lead_decision
 
 
 SCRIPT = [
@@ -59,6 +61,16 @@ def main():
 
         intent = result.get("intent", "")
         print(f"\nAssistant [{intent}]: {result['messages'][-1].content}")
+
+        # This script always auto-approves so the demo runs unattended, but
+        # it goes through the real interrupt()/resume path — a live deployment
+        # would swap this for an actual human clicking approve/reject.
+        pending = get_pending_lead_approval(graph, config)
+        if pending:
+            lead_info = pending["lead_info"]
+            print(f"\n[Auto-approving demo lead: {lead_info['name']} <{lead_info['email']}>]")
+            result = resume_with_lead_decision(graph, config, approved=True)
+            print(f"\nAssistant [lead_review]: {result['messages'][-1].content}")
 
     print("\n" + "=" * 60)
     print("  Demo complete. Final state:")

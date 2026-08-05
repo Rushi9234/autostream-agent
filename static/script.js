@@ -96,22 +96,18 @@ async function sendMessage(message) {
     const data = await res.json();
 
     removeTypingIndicator();
-    addMessage("assistant", data.reply, { intent: data.intent });
 
-    // This public demo has no admin panel for a human to approve/reject
-    // leads (that's what /approve is for -- see README), so it auto-approves
-    // rather than leaving every visitor's signup stuck pending forever.
-    if (data.pending_approval) {
-      addTypingIndicator();
-      const approveRes = await fetch("/approve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ thread_id: getThreadId(), approved: true }),
-      });
-      const approveData = await approveRes.json();
-      removeTypingIndicator();
-      addMessage("assistant", approveData.reply, { intent: "lead_review" });
-    }
+    // The server resolves lead approval itself when AUTO_APPROVE_DEMO_LEADS
+    // is on (the default for this public demo) -- see api.py's /chat handler
+    // -- so data.reply here is already the final, resumed reply in that case.
+    // The client deliberately never calls /approve directly: that endpoint
+    // requires an admin token, which a public page can't hold without
+    // exposing it to every visitor. If a deployment turns auto-approve off,
+    // pending_approval stays true and we just show that state honestly.
+    addMessage("assistant", data.reply, {
+      intent: data.intent,
+      pending: data.pending_approval,
+    });
   } catch (err) {
     removeTypingIndicator();
     addMessage("assistant", "Sorry, I couldn't reach the assistant just now. Please try again in a moment.");

@@ -210,12 +210,42 @@ resumes exactly where it left off.
 - **API (`api.py`)**: `/chat` returns `pending_approval: true` and the
   `pending_lead` details instead of finalizing anything; call `POST /approve`
   with `{"thread_id": ..., "approved": true/false}` to resume — this is the
-  shape a real admin panel or Slack-button reviewer would call.
-- **Gradio (`app.py`)**: auto-approves, since a public chat widget has no
-  reviewer UI behind it — see the code comment there for why that's an
-  honest simplification, not a silent gap.
+  shape a real admin panel or Slack-button reviewer would call. **Requires an
+  `X-Admin-Token` header** matching `ADMIN_TOKEN` (see "Security" below) —
+  without that, `thread_id` alone would let anyone approve or reject someone
+  else's lead.
+- **Custom UI (`static/`) and Gradio (`app.py`)**: auto-approve, since a
+  public chat widget has no reviewer UI behind it. This happens **server-side**
+  now (`api.py`'s `/chat` handler, gated by `AUTO_APPROVE_DEMO_LEADS`) rather
+  than the browser calling `/approve` itself — a public page can't hold the
+  admin token without handing it to every visitor.
 - **`demo.py`**: auto-approves too, so the scripted walkthrough completes
   unattended, but it goes through the exact same `interrupt()`/resume path.
+
+## Security
+
+A pass looking specifically for security issues (not just correctness)
+found one real gap: **`/approve` had no access control** — `thread_id` alone
+gated it, so anyone who knew or guessed a thread's ID could approve or reject
+someone else's lead over the network. Fixed with an `X-Admin-Token` header
+check (`require_admin_token` in `api.py`), backed by an `ADMIN_TOKEN` env var
+— if unset, a random token is generated at startup and printed once rather
+than the endpoint silently staying open. `tests/test_api.py` covers this.
+
+Also checked and confirmed clean: no secrets anywhere in git history (`git
+log --all -p -- .env`), all SQL uses parameterized queries (no string
+interpolation, so no injection surface), and the custom frontend
+(`static/script.js`) only ever uses `textContent` for user-controlled data —
+never `innerHTML`, so no XSS path from a message a user or the agent sends.
+
+`pip-audit` flags several transitive dependencies (mostly via
+`langchain`/`langgraph`, a couple of dev-only tools) with known advisories.
+Deliberately not blindly bumping those — several are major-version jumps
+that would risk breaking the `interrupt()`/`SqliteSaver` code this project
+depends on, right after getting it working and tested. The honest thing to
+do is flag it as a follow-up task (upgrade on a branch, re-run the full test
+suite, verify HITL/checkpointing still work) rather than either ignoring it
+or making a risky change without room to verify it.
 
 ## What Changed From the First Version
 
@@ -254,6 +284,10 @@ the core routing/RAG/extraction logic was working. The main upgrades:
   `leads.db`.
 - **CI.** `.github/workflows/tests.yml` runs the full `pytest` suite on every
   push/PR — no API key/secret needed since the tests never call a live LLM.
+- **Custom frontend and an access-control fix.** Built a dependency-free
+  static chat UI (`static/`) instead of relying on a framework's default
+  theme, and a security pass found `/approve` had no auth at all — fixed
+  with an `ADMIN_TOKEN`-gated header check. See "Security" below.
 
 ## Evaluating the Intent Classifier
 

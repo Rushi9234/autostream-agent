@@ -8,11 +8,15 @@ changes, so restarting the app doesn't re-embed the same text every single time.
 """
 
 import hashlib
+import os
 from pathlib import Path
 
+from dotenv import load_dotenv
 from langchain_community.vectorstores import FAISS
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_text_splitters import MarkdownHeaderTextSplitter
+
+load_dotenv()
 
 KB_PATH = Path(__file__).parent / "knowledge_base" / "autostream_kb.md"
 INDEX_DIR = Path(__file__).parent / "index"
@@ -73,7 +77,9 @@ def build_vector_store(force_rebuild=False):
     if _vector_store is not None and not force_rebuild:
         return _vector_store
 
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
+    api_key = os.getenv("GOOGLE_API_KEY")
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", google_api_key=api_key)
+
 
     if not force_rebuild:
         cached = _load_cached_index(embeddings)
@@ -91,14 +97,66 @@ def build_vector_store(force_rebuild=False):
     return _vector_store
 
 
-def retrieve(query, k=3):
-    """Return top-k chunks joined into a single context string."""
+def format_chunk_section(doc):
+    """Dynamically construct header hierarchy from document metadata."""
+    parts = []
+    for h in ("h1", "h2", "h3"):
+        if doc.metadata.get(h):
+            parts.append(doc.metadata[h])
+    if not parts:
+        return "General"
+    if len(parts) > 1:
+        return " → ".join(parts[1:])
+    return parts[0]
+
+
+def retrieve_with_sources(query, k=3, score_threshold=0.52):
+    """
+    Return relevant KB context string and source metadata list.
+
+    Uses FAISS distance scores to filter out off-topic queries (L2 distance > 0.52).
+    Enriches retrieved chunks with parent header hierarchy.
+    """
     store = build_vector_store()
-    docs = store.similarity_search(query, k=k)
-    return "\n\n---\n\n".join(doc.page_content for doc in docs)
+    docs_and_scores = store.similarity_search_with_score(query, k=k)
+
+    valid_results = [(doc, score) for doc, score in docs_and_scores if score <= score_threshold]
+
+    if not valid_results:
+        return "", []
+
+    context_blocks = []
+    sources = []
+    seen_sections = set()
+
+    for doc, score in valid_results:
+        section = format_chunk_section(doc)
+        source_name = KB_PATH.name
+
+        block = f"[Source: {source_name}]\n[Section: {section}]\n\n{doc.page_content}"
+        context_blocks.append(block)
+
+        if section not in seen_sections:
+            seen_sections.add(section)
+            sources.append({
+                "source": source_name,
+                "section": section,
+            })
+
+    context_text = "\n\n---\n\n".join(context_blocks)
+    return context_text, sources
+
+
+def retrieve(query, k=3):
+    """Return top-k chunks joined into a single context string (for backward compatibility)."""
+    context_text, _ = retrieve_with_sources(query, k=k)
+    return context_text
 
 
 if __name__ == "__main__":
     # `python rag.py` forces a rebuild and prints a quick retrieval sanity check.
     build_vector_store(force_rebuild=True)
-    print(retrieve("How much does the Pro plan cost?"))
+    ctx, src = retrieve_with_sources("How much does the Pro plan cost?")
+    print("Context:\n", ctx)
+    print("Sources:\n", src)
+

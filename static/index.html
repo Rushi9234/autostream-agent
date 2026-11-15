@@ -1,34 +1,430 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="light" data-theme="light">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AutoStream Assistant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fcfbfa">
+  <meta name="description" content="AutoStream AI Video Studio Assistant — explore plans, compare features, and automate editing workflows.">
+  <title>AutoStream — AI Video Studio Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <div class="app">
-    <div class="topbar">
-      <span class="rec-dot" aria-hidden="true"></span>
-      <span class="brand">AutoStream <span class="dim">Assistant</span></span>
-      <span class="topbar-spacer"></span>
-      <span class="status-pill"><span class="dot" aria-hidden="true"></span>agent online</span>
-      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle color theme">theme</button>
+
+  <!-- Accessible Skip Link -->
+  <a href="#input" class="skip-link">Skip to conversation composer</a>
+
+  <!-- Mobile Overlay -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <div class="app-container">
+
+    <!-- LEFT SIDEBAR (280px) -->
+    <aside class="sidebar" id="sidebar" aria-label="Workspace navigation">
+      <div class="sidebar-top">
+        <div class="brand">
+          <div class="brand-badge" aria-hidden="true">
+            <span class="brand-pulse-dot"></span>
+            <span class="brand-initial">A</span>
+          </div>
+          <div class="brand-meta">
+            <span class="brand-title">AutoStream</span>
+            <span class="brand-subtitle">Studio Suite</span>
+          </div>
+          <button type="button" class="btn-sidebar-close" id="sidebarCloseBtn" aria-label="Close navigation sidebar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+
+        <button type="button" class="btn-new-chat" id="newChatBtn" aria-label="Start new conversation">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          <span>New chat</span>
+        </button>
+
+        <nav class="sidebar-nav" aria-label="Studio sections">
+          <a href="#" class="nav-item active" id="navConversations">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/></svg>
+            <span>Conversations</span>
+          </a>
+          <a href="#" class="nav-item" id="navExplore">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"/></svg>
+            <span>Explore</span>
+          </a>
+          <a href="#" class="nav-item" id="navPricing">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+            <span>Pricing</span>
+          </a>
+          <a href="#" class="nav-item" id="navRoiCalc">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="9" x2="9" y1="21" y2="9"/></svg>
+            <span>ROI Calculator</span>
+          </a>
+          <a href="#" class="nav-item" id="navAdminCrm">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+            <span>Admin CRM</span>
+          </a>
+          <a href="#" class="nav-item" id="navSettings">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span>Settings</span>
+          </a>
+          <a href="#" class="nav-item" id="navThemeToggle" role="button">
+            <span class="theme-icon-slot" aria-hidden="true">🌓</span>
+            <span id="navThemeLabel">Switch to Dark UI</span>
+          </a>
+        </nav>
+      </div>
+
+      <!-- Recent Conversations List -->
+      <div class="sidebar-history">
+        <div class="history-label">Recent sessions</div>
+        <div class="recent-list" id="recentList" role="region" aria-label="Recent chats">
+          <div class="recent-placeholder">Loading recent chats…</div>
+        </div>
+      </div>
+
+      <!-- Getting Started Progress Widget -->
+      <div class="sidebar-progress-card">
+        <div class="progress-header">
+          <span class="progress-title">Getting started</span>
+          <span class="progress-fraction" id="sidebarProgressCount">2 of 4</span>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="sidebarProgressBar" style="width: 50%;"></div>
+        </div>
+        <div class="checklist">
+          <div class="check-item done">
+            <span class="check-dot" aria-hidden="true">✓</span>
+            <span>Workspace created</span>
+          </div>
+          <div class="check-item done">
+            <span class="check-dot" aria-hidden="true">✓</span>
+            <span>Connecting a project</span>
+          </div>
+          <div class="check-item">
+            <span class="check-dot" aria-hidden="true"></span>
+            <span>Invite your team</span>
+          </div>
+          <div class="check-item">
+            <span class="check-dot" aria-hidden="true"></span>
+            <span>First render</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Daily Brief (Live Leads summary) -->
+      <div class="sidebar-brief-card" id="dailyBriefCard">
+        <div class="brief-header">
+          <span class="brief-title">Daily studio brief</span>
+          <span class="brief-live-dot" aria-hidden="true"></span>
+        </div>
+        <div class="brief-content" id="briefContent" role="status" aria-live="polite">
+          <div class="brief-loading">Analyzing real activity…</div>
+        </div>
+      </div>
+
+      <!-- User Profile Card -->
+      <div class="sidebar-user-card">
+        <div class="user-avatar" aria-hidden="true">RK</div>
+        <div class="user-meta">
+          <span class="user-name">Rushikesh Kedar</span>
+          <span class="user-tier">Pro trial</span>
+        </div>
+        <button type="button" class="btn-more-options" aria-label="Account and user settings">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="12" r="1.5"/>
+          </svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- CENTER CHAT WORKSPACE -->
+    <main class="main-workspace" id="main-content">
+      <!-- Top Studio Header -->
+      <header class="workspace-header">
+        <div class="header-left">
+          <button type="button" class="btn-mobile-menu" id="mobileMenuBtn" aria-label="Open sidebar menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
+          <h1 class="header-title">AutoStream Assistant</h1>
+          <span class="status-pill status-online">
+            <span class="dot dot-sage" aria-hidden="true"></span>
+            <span>AI online</span>
+          </span>
+        </div>
+
+        <div class="header-right">
+          <span class="status-pill status-rec">
+            <span class="dot dot-rec" aria-hidden="true"></span>
+            <span>REC</span>
+          </span>
+          <button type="button" class="btn-top-admin" id="topAdminBtn" aria-label="Open Admin CRM" title="Admin Lead CRM">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+            <span>Admin CRM</span>
+          </button>
+          <button type="button" class="btn-theme-toggle" id="themeToggleBtn" aria-label="Toggle theme between Light and Dark mode" title="Toggle Theme (Light / Dark)">
+            <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+            <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
+          <button type="button" class="btn-clear" id="clearBtn" aria-label="Clear active conversation">Clear</button>
+        </div>
+      </header>
+
+      <!-- Scrollable Message Body -->
+      <div class="workspace-body" id="workspaceBody">
+        <!-- Hero Welcome State (default for fresh session) -->
+        <div class="welcome-view" id="welcomeContainer">
+          <div class="welcome-eyebrow">Creative Studio Assistant</div>
+          <h2 class="welcome-heading">Edit less. Create more.</h2>
+          <p class="welcome-subheading">Explore automated workflows, compare feature tiers, and find the perfect plan for your channel.</p>
+
+          <div class="capability-cards-grid">
+            <button type="button" class="capability-card" data-prompt="How much does the Pro plan cost?">
+              <div class="card-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+              </div>
+              <span class="card-label">Explore pricing</span>
+            </button>
+
+            <button type="button" class="capability-card" id="cardRoiCalc">
+              <div class="card-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="9" x2="9" y1="21" y2="9"/></svg>
+              </div>
+              <span class="card-label">Calculate video ROI</span>
+            </button>
+
+            <button type="button" class="capability-card" data-prompt="Can you compare Basic and Pro side by side?">
+              <div class="card-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20M2 7l20-5M2 17l20 5"/></svg>
+              </div>
+              <span class="card-label">Compare plans</span>
+            </button>
+
+            <button type="button" class="capability-card" data-prompt="I want to get started with the Pro plan for YouTube.">
+              <div class="card-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"/><path d="M5 21h14"/></svg>
+              </div>
+              <span class="card-label">Get started with Pro</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Dynamic Chat Stream -->
+        <div class="thread-container" id="threadContainer">
+          <div class="thread-stream" id="thread" role="log" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <!-- Command Center Composer -->
+      <footer class="composer-container">
+        <form class="composer-card" id="composer">
+          <label for="input" class="visually-hidden">Ask AutoStream Assistant about plans, features, or sign up</label>
+          <textarea id="input" name="prompt" rows="2" placeholder="Ask about pricing, features, or getting started…" autocomplete="off" spellcheck="true" aria-label="Ask AutoStream Assistant about plans, features, or sign up"></textarea>
+          <div class="composer-actions-bar">
+            <div class="composer-attachments">
+              <button type="button" class="btn-attach" title="Attach video project" aria-label="Attach video project">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg>
+              </button>
+              <button type="button" class="btn-attach" title="Insert media assets" aria-label="Insert media assets">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+              </button>
+              <span class="shortcut-hint"><kbd>⌘</kbd>&nbsp;<kbd>↵</kbd>&nbsp;to send</span>
+            </div>
+
+            <button type="submit" class="btn-send" id="send" aria-label="Send message">
+              <span>Send</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+            </button>
+          </div>
+        </form>
+
+        <div class="thinking-status-bar" id="thinkingBar" role="status" aria-live="polite" style="display: none;">
+          <span class="bar-pulse-group" aria-hidden="true">
+            <span class="pulse-bar bar-1"></span>
+            <span class="pulse-bar bar-2"></span>
+            <span class="pulse-bar bar-3"></span>
+          </span>
+          <span class="thinking-text">AutoStream is thinking…</span>
+        </div>
+      </footer>
+    </main>
+
+    <!-- RIGHT CONTEXT DRAWER (300px, Collapsible) -->
+    <aside class="context-drawer" id="contextDrawer" aria-label="Session context and onboarding state">
+      <div class="context-drawer-inner" id="contextDrawerContent">
+        <div class="context-header">
+          <span class="context-title">Session context</span>
+          <button type="button" class="btn-collapse" id="collapseContextBtn" aria-label="Collapse context panel">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/></svg>
+          </button>
+        </div>
+
+        <!-- Conversation Details -->
+        <div class="context-card">
+          <div class="card-caption">Overview</div>
+          <div class="context-row">
+            <span class="row-label">Topic</span>
+            <span class="row-value" id="contextTopic">AutoStream Pricing & Plans</span>
+          </div>
+          <div class="context-row">
+            <span class="row-label">Status</span>
+            <div class="status-tag" id="contextStatus">
+              <span class="dot dot-sage" aria-hidden="true"></span>
+              <span>Active</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Getting Started Live Slot Tracker -->
+        <div class="context-card">
+          <div class="context-card-top">
+            <span class="card-caption">Creator onboarding</span>
+            <span class="context-counter" id="slotCounter" aria-live="polite">0 / 3</span>
+          </div>
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="slotProgressBar" style="width: 0%;"></div>
+          </div>
+          <div class="slot-list">
+            <div class="slot-item" id="slotItemName">
+              <span class="slot-check" aria-hidden="true"></span>
+              <span class="slot-label">Name</span>
+              <span class="slot-value" id="slotValName">—</span>
+            </div>
+            <div class="slot-item" id="slotItemEmail">
+              <span class="slot-check" aria-hidden="true"></span>
+              <span class="slot-label">Email</span>
+              <span class="slot-value" id="slotValEmail">—</span>
+            </div>
+            <div class="slot-item" id="slotItemPlatform">
+              <span class="slot-check" aria-hidden="true"></span>
+              <span class="slot-label">Platform</span>
+              <span class="slot-value" id="slotValPlatform">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recommended Plan Card -->
+        <div class="context-card card-recommended">
+          <div class="card-caption">Recommended tier</div>
+          <div class="recommended-row">
+            <span class="plan-name">Pro</span>
+            <span class="plan-price">$79/mo</span>
+          </div>
+          <button type="button" class="btn-continue-plan" id="contextPlanBtn" aria-label="Get started with Pro plan">
+            Get started with Pro
+          </button>
+          <button type="button" class="btn-context-roi" id="contextRoiBtn" aria-label="Calculate video ROI and savings">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="9" x2="9" y1="21" y2="9"/></svg>
+            <span>Calculate Video ROI</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Collapsed Rail State -->
+      <button type="button" class="context-rail-toggle" id="expandContextBtn" aria-label="Expand context panel" style="display: none;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m10 15-3-3 3-3"/></svg>
+        <span class="rail-text">Context</span>
+      </button>
+    </aside>
+
+  </div>
+
+  <!-- Visual Admin CRM & Lead Review Modal -->
+  <div class="modal-backdrop" id="adminModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="adminModalTitle" style="display: none;">
+    <div class="admin-modal-card">
+      <div class="admin-modal-header">
+        <div class="admin-header-title-group">
+          <div class="admin-badge">Admin Studio CRM</div>
+          <h2 id="adminModalTitle" class="admin-modal-heading">Creator Leads & Approvals</h2>
+        </div>
+        <button type="button" class="btn-close-modal" id="closeAdminModalBtn" aria-label="Close Admin Modal">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Auth Gate (Shown if no token verified) -->
+      <div class="admin-auth-gate" id="adminAuthGate">
+        <div class="auth-icon-wrap" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <h3 class="auth-title">Admin Authentication</h3>
+        <p class="auth-desc">Enter the master <code>ADMIN_TOKEN</code> to access unmasked creator leads and manage pending approvals.</p>
+        <form class="auth-form" id="adminAuthForm">
+          <div class="auth-input-group">
+            <input type="password" id="adminTokenInput" class="admin-input-pw" placeholder="Enter X-Admin-Token…" autocomplete="current-password" required>
+            <button type="submit" class="btn-admin-submit" id="adminAuthSubmitBtn">Unlock CRM</button>
+          </div>
+          <div class="auth-error-msg" id="adminAuthError" style="display: none;"></div>
+        </form>
+      </div>
+
+      <!-- CRM Content (Shown once unlocked) -->
+      <div class="admin-crm-body" id="adminCrmBody" style="display: none;">
+        <!-- Metrics Row -->
+        <div class="admin-metrics-row">
+          <div class="admin-metric-card">
+            <div class="metric-label">Total Leads</div>
+            <div class="metric-value" id="crmMetricTotal">0</div>
+          </div>
+          <div class="admin-metric-card">
+            <div class="metric-label">Pending Approvals</div>
+            <div class="metric-value amber" id="crmMetricPending">0</div>
+          </div>
+          <div class="admin-metric-card">
+            <div class="metric-label">Top Content Platform</div>
+            <div class="metric-value sage" id="crmMetricPlatform">—</div>
+          </div>
+        </div>
+
+        <!-- Controls Toolbar -->
+        <div class="admin-toolbar">
+          <div class="toolbar-left">
+            <input type="text" id="crmSearchInput" class="crm-search-input" placeholder="Search by name or email…" aria-label="Search leads">
+            <select id="crmPlatformFilter" class="crm-filter-select" aria-label="Filter leads by platform">
+              <option value="">All Platforms</option>
+              <option value="YouTube">YouTube</option>
+              <option value="TikTok">TikTok</option>
+              <option value="Instagram">Instagram</option>
+              <option value="Twitch">Twitch</option>
+            </select>
+          </div>
+          <div class="toolbar-right">
+            <button type="button" class="btn-crm-action" id="crmRefreshBtn" title="Refresh leads">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+              <span>Refresh</span>
+            </button>
+            <button type="button" class="btn-crm-action primary" id="crmExportBtn" title="Export as CSV file">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+              <span>Export CSV</span>
+            </button>
+            <button type="button" class="btn-crm-action" id="crmLockBtn" title="Lock CRM session">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <span>Lock</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Table Container -->
+        <div class="crm-table-container">
+          <table class="crm-table" id="crmLeadsTable">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Creator Name</th>
+                <th>Email Address</th>
+                <th>Platform</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="crmTableBody">
+              <tr><td colspan="5" class="table-empty">Loading leads…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
-    <div class="ticks" aria-hidden="true"></div>
-
-    <div class="thread" id="thread" role="log" aria-live="polite"></div>
-
-    <div class="examples" id="examples">
-      <button class="example-chip" type="button">Hi, tell me about your pricing.</button>
-      <button class="example-chip" type="button">What's your refund policy?</button>
-      <button class="example-chip" type="button">I want to try the Pro plan for my YouTube channel.</button>
-    </div>
-
-    <form class="composer" id="composer">
-      <input id="input" type="text" placeholder="Ask about pricing, features, or say hi…" autocomplete="off" />
-      <button id="send" type="submit">Send</button>
-    </form>
   </div>
 
   <script src="/static/script.js"></script>

@@ -28,7 +28,9 @@ def _mask_email(email):
 
 
 def _connect():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=15.0)
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA busy_timeout=5000;")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS leads (
@@ -40,6 +42,18 @@ def _connect():
         )
         """
     )
+    # Safe migration: remove legacy duplicate records keeping earliest ID before creating unique index
+    conn.execute(
+        """
+        DELETE FROM leads
+        WHERE id NOT IN (
+            SELECT MIN(id)
+            FROM leads
+            GROUP BY lower(trim(email))
+        )
+        """
+    )
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_email_unique ON leads(lower(trim(email)));")
     return conn
 
 
@@ -47,33 +61,71 @@ def mock_lead_capture(name, email, platform):
     """
     Persist a captured lead to leads.db and return the stored row as a dict.
 
-    Kept the original function name/signature (agent.py calls it unchanged) even
-    though it's not "mock" anymore — this is a placeholder for whatever real CRM
-    or webhook call would replace it in a production deployment (see README).
+    Normalizes email addresses and enforces database-level deduplication: if a lead with
+    the same normalized email already exists, returns the existing record without inserting
+    a duplicate row.
     """
+    clean_name = str(name).strip()
+    clean_email = str(email).strip().lower()
+    clean_platform = str(platform).strip()
     captured_at = datetime.now(timezone.utc).isoformat()
 
     with _connect() as conn:
-        cursor = conn.execute(
-            "INSERT INTO leads (name, email, platform, captured_at) VALUES (?, ?, ?, ?)",
-            (name, email, platform, captured_at),
-        )
-        lead_id = cursor.lastrowid
+        # Check for an existing lead with the same normalized email
+        existing = conn.execute(
+            "SELECT id, name, email, platform, captured_at FROM leads WHERE lower(trim(email)) = ? LIMIT 1",
+            (clean_email,),
+        ).fetchone()
 
-    # The full email is fine to store (it's the whole point of a lead), but
-    # console/log output is easy to forget about, ship to a log aggregator,
-    # or screenshot — so what appears there is masked, not the raw PII.
+        if existing:
+            logger.info(
+                "Lead deduplicated: existing id=%s name=%s email=%s",
+                existing[0], existing[1], _mask_email(clean_email),
+            )
+            return {
+                "id": existing[0],
+                "name": existing[1],
+                "email": existing[2],
+                "platform": existing[3],
+                "captured_at": existing[4],
+                "is_duplicate": True,
+            }
+
+        try:
+            cursor = conn.execute(
+                "INSERT INTO leads (name, email, platform, captured_at) VALUES (?, ?, ?, ?)",
+                (clean_name, clean_email, clean_platform, captured_at),
+            )
+            lead_id = cursor.lastrowid
+        except sqlite3.IntegrityError:
+            # Concurrent insert race condition caught by DB unique constraint
+            existing = conn.execute(
+                "SELECT id, name, email, platform, captured_at FROM leads WHERE lower(trim(email)) = ? LIMIT 1",
+                (clean_email,),
+            ).fetchone()
+            if existing:
+                return {
+                    "id": existing[0],
+                    "name": existing[1],
+                    "email": existing[2],
+                    "platform": existing[3],
+                    "captured_at": existing[4],
+                    "is_duplicate": True,
+                }
+            raise
+
     logger.info(
         "Lead captured: id=%s name=%s email=%s platform=%s",
-        lead_id, name, _mask_email(email), platform,
+        lead_id, clean_name, _mask_email(clean_email), clean_platform,
     )
 
     return {
         "id": lead_id,
-        "name": name,
-        "email": email,
-        "platform": platform,
+        "name": clean_name,
+        "email": clean_email,
+        "platform": clean_platform,
         "captured_at": captured_at,
+        "is_duplicate": False,
     }
 
 

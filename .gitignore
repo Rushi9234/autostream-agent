@@ -17,7 +17,7 @@ __pycache__/
 .DS_Store
 
 # Runtime data (regenerated locally, not shipped in the repo)
-leads.db
+leads.db*
 checkpoints.sqlite*
 index/
 *.sqlite*
@@ -29,3 +29,8 @@ AutoStream_Code_Review_and_Upgrade_Roadmap.pdf
 
 # Personal interview prep, not project documentation
 INTERVIEW_PREP.md
+
+# Scratch and agent workspace configs
+scratch/
+.agents/
+skills-lock.json

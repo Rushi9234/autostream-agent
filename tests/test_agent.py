@@ -62,23 +62,93 @@ def test_invoke_llm_returns_none_after_exhausting_retries(monkeypatch):
 def test_route_turn_stays_in_lead_flow_once_started(monkeypatch):
     """
     Regression test for the routing guard: once we've captured a partial
-    lead (e.g. just a name), the next turn must stay on the lead path even
-    though a bare reply like "Alex" would otherwise look like casual chat.
+    lead (e.g. just a name), the next turn stays on lead path for casual/short text.
     """
+    from langchain_core.messages import HumanMessage
 
-    def fail_if_called(*args, **kwargs):
-        raise AssertionError("classifier should not be called mid lead-flow")
-
-    monkeypatch.setattr(agent, "invoke_llm", fail_if_called)
+    monkeypatch.setattr(agent, "invoke_llm", lambda prompt: "high_intent")
 
     state = {
-        "messages": [],
+        "messages": [HumanMessage(content="Alex")],
         "intent": "",
         "lead_info": {"name": "Alex"},
         "lead_captured": False,
     }
     result = agent.route_turn(state)
-    assert result == {"intent": "high_intent"}
+    assert result["intent"] == "high_intent"
+    assert result["lead_info"] == {"name": "Alex"}
+
+
+def test_mixed_intent_preserves_slots_and_routes_to_inquiry(monkeypatch):
+    from langchain_core.messages import HumanMessage
+
+    def fake_llm(prompt):
+        if "Extract lead information" in prompt:
+            return '{"name": null, "email": "rushikesh@example.com", "platform": null}'
+        return "inquiry"
+
+    monkeypatch.setattr(agent, "invoke_llm", fake_llm)
+
+    state = {
+        "messages": [HumanMessage(content="My email is rushikesh@example.com, but what is your refund policy?")],
+        "intent": "",
+        "lead_info": {"name": "Rushikesh"},
+        "lead_captured": False,
+    }
+    result = agent.route_turn(state)
+
+    assert result["intent"] == "inquiry"
+    assert result["lead_info"]["name"] == "Rushikesh"
+    assert result["lead_info"]["email"] == "rushikesh@example.com"
+
+
+def test_dynamic_continuation_in_rag_node(monkeypatch):
+    from langchain_core.messages import HumanMessage
+
+    monkeypatch.setattr(
+        agent,
+        "retrieve_with_sources",
+        lambda q, k=3: ("AutoStream refund policy: 7 days refund.", [{"source": "autostream_kb.md", "section": "Company Policies → Refund Policy"}]),
+    )
+    monkeypatch.setattr(agent, "invoke_llm", lambda prompt: "AutoStream offers refunds within 7 days.")
+
+    state = {
+        "messages": [HumanMessage(content="What is your refund policy?")],
+        "lead_info": {"name": "Rushikesh"},
+        "lead_captured": False,
+    }
+    result = agent.rag_node(state)
+    content = result["messages"][0].content
+
+    assert "7 days" in content
+    assert "what's the best email to reach you at" in content.lower()
+
+
+def test_invalid_email_regex_validation():
+    assert agent.is_valid_email("user@example.com") is True
+    assert agent.is_valid_email("user.name+tag@domain.co.uk") is True
+    assert agent.is_valid_email("not-an-email") is False
+    assert agent.is_valid_email("user@domain") is False
+    assert agent.is_valid_email("   ") is False
+
+
+def test_off_topic_query_returns_decline_and_preserves_lead_info(monkeypatch):
+    from langchain_core.messages import HumanMessage
+
+    monkeypatch.setattr(agent, "retrieve_with_sources", lambda q, k=3: ("", []))
+
+    state = {
+        "messages": [HumanMessage(content="What is the weather in Tokyo?")],
+        "lead_info": {"name": "Rushikesh"},
+        "lead_captured": False,
+    }
+    result = agent.rag_node(state)
+
+    assert result["messages"][0].content == agent.OFF_TOPIC_REPLY
+    assert result["lead_info"] == {"name": "Rushikesh"}
+    assert result["sources"] == []
+    assert "(By the way" not in result["messages"][0].content
+
 
 
 def test_route_turn_falls_back_to_casual_when_llm_unavailable(monkeypatch):
@@ -93,7 +163,7 @@ def test_route_turn_falls_back_to_casual_when_llm_unavailable(monkeypatch):
         "lead_captured": False,
     }
     result = agent.route_turn(state)
-    assert result == {"intent": "casual"}
+    assert result["intent"] == "casual"
 
 
 def test_pick_after_lead_routes_to_escalation_once_complete():
@@ -110,7 +180,6 @@ def test_pick_after_lead_ends_turn_when_fields_still_missing():
 
 
 def test_pick_after_lead_ends_turn_once_already_captured():
-    # Guards against re-escalating a lead that already went through review.
     captured_state = {
         "lead_info": {"name": "Alex", "email": "a@x.com", "platform": "YouTube"},
         "lead_captured": True,
@@ -147,20 +216,16 @@ def test_escalate_node_rejected_clears_lead_info(monkeypatch, tmp_path):
 
 
 def test_rag_node_falls_back_gracefully_when_retrieve_fails(monkeypatch):
-    """
-    Regression test: retrieve() calls Gemini's embeddings API directly to
-    build/query the FAISS index, and unlike invoke_llm() it originally had
-    no error handling — a transient embeddings-API failure crashed the
-    whole turn instead of degrading like every other node does.
-    """
     from langchain_core.messages import HumanMessage
 
     def boom(*args, **kwargs):
         raise RuntimeError("embeddings API unreachable")
 
     monkeypatch.setattr(agent, "retrieve", boom)
+    monkeypatch.setattr(agent, "retrieve_with_sources", boom)
 
     state = {"messages": [HumanMessage(content="What's your refund policy?")]}
     result = agent.rag_node(state)
 
     assert result["messages"][0].content == agent.LLM_UNAVAILABLE_REPLY
+

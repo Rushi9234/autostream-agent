@@ -1,43 +1,49 @@
-# AutoStream Agent
+# AutoStream Agent — AI Video Studio Suite
 
 **Demo video:** https://drive.google.com/drive/folders/1rtzM5f_DhSS6CN9Krr4fgQyCOE-T1xGP?usp=sharing
 
-A conversational AI agent I built to learn how to design a real multi-turn,
-stateful LLM agent instead of a single prompt-in/text-out wrapper — intent
-routing, retrieval-augmented answering, structured multi-turn slot-filling,
-and a persisted tool call, all as an explicit **LangGraph** state machine.
+A full-stack conversational AI studio agent designed as an explicit **LangGraph** state machine — featuring multi-turn intent routing, retrieval-augmented answering (RAG over FAISS), structured slot-filling with human-in-the-loop escalation, real-time SSE token streaming, an interactive Video ROI calculator, and a visual Admin CRM dashboard.
 
-The agent sits in front of **AutoStream**, a reference/demo SaaS product for
-automated video editing (pricing, features, and policies are all sample data
-in `knowledge_base/autostream_kb.md` — the point of this project is the agent
-architecture, not a real business). It:
+The agent sits in front of **AutoStream**, a SaaS platform for automated AI video production (smart captioning, 4K rendering, multi-platform formatting for YouTube, TikTok, Twitch, and Instagram).
 
-- Classifies each incoming message into `casual`, `inquiry`, or `high_intent`
-- Answers product questions using **RAG** over a local knowledge base (FAISS)
-- Runs a guided, multi-turn signup flow that extracts name/email/platform,
-  then **pauses for human approval** (LangGraph's `interrupt()`) before the
-  lead-capture tool ever fires — see "Human-in-the-Loop" below
-- Persists both the conversation state and captured leads to disk (SQLite),
-  so a restart doesn't lose in-progress conversations or captured leads
-- Logs every node transition (which node ran, resulting intent, latency) to
-  `agent.log`, and masks PII in anything that hits stdout/logs
+---
 
-Built with **LangGraph**, **Gemini 2.5 Flash-Lite**, and **FAISS**. Originally
-built against Gemini 1.5 Flash; migrated to 2.5 Flash-Lite after Google
-retired the 1.5 model family.
+## Visual Showcase
 
-## Try it
+| Crisp Ivory Light Studio | Dark Obsidian Mode |
+| :---: | :---: |
+| ![Light Studio](screenshots/01_home_light_studio.png) | ![Dark Obsidian](screenshots/02_home_dark_obsidian.png) |
+
+| Interactive Video ROI Calculator | SSE Streaming & Pricing Cards |
+| :---: | :---: |
+| ![ROI Calculator](screenshots/03_interactive_roi_calculator.png) | ![Pricing Cards](screenshots/04_pricing_inquiry_and_cards.png) |
+
+| Visual Admin CRM & Lead Registry | Responsive Mobile Experience (390px) |
+| :---: | :---: |
+| ![Admin CRM](screenshots/09_admin_crm_unlocked_leads_table.png) | ![Mobile Studio](screenshots/12_mobile_chat_workspace.png) |
+
+---
+
+## Core Capabilities
+
+- **Intelligent Intent Routing:** Dynamically routes queries between `casual`, `inquiry`, and `high_intent` using LangGraph conditional edges with deterministic fast-paths.
+- **RAG Knowledge Retrieval:** Transparent similarity search across the AutoStream knowledge base using local FAISS vector embeddings, complete with verifiable source pills.
+- **Robust Multi-Turn Slot Filling:** Captures creator details (`name`, `email`, `platform`) with channel URL detection (`youtube.com/@handle`, `tiktok.com`, `twitch.tv`), preserving conversational context across topic changes.
+- **Real-Time Token Streaming:** High-performance Server-Sent Events (`POST /chat/stream`) progressive streaming with fallback to standard `/chat`.
+- **Interactive Video ROI Calculator:** In-chat interactive slider tool calculating hours and money saved based on weekly video volume and raw footage length.
+- **Visual Admin CRM Dashboard:** Gated by `X-Admin-Token` verification (`/api/admin/verify`), offering real-time search, platform filtering, conversion metrics, and RFC 4180 CSV export (`/api/leads/export`).
+- **Human-in-the-Loop Review:** Pauses state execution via LangGraph's `interrupt()` before finalizing lead capture into SQLite (`leads.db`), with dual approval channels (client review cards + admin API).
+- **Graceful Fallbacks & High Availability:** Multi-tier model fallbacks (`gemini-2.5-flash` $\rightarrow$ `gemini-2.5-flash-lite`) plus deterministic KB synthesis so zero turns crash even when external API quotas are exhausted.
+
+## Try It
 
 ```bash
 uvicorn api:app --reload
 ```
 
-then open **http://127.0.0.1:8000** for the custom chat UI (`static/`) — a
-small vanilla HTML/CSS/JS front end built specifically for this project
-instead of a framework's default theme (see "Frontend" below), served
-directly by `api.py`.
+Open **http://127.0.0.1:8000** for the custom Web Studio UI (`static/`) — a vanilla HTML/CSS/JS interface built with Crisp Ivory Light UI (`#fcfbfa`) and Dark Obsidian (`#0a0908`), strictly free of generic blue or neon themes.
 
-Or skip the UI and hit the API directly:
+Or test via CLI:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/chat \
@@ -372,16 +378,16 @@ To put this behind the WhatsApp Cloud API (webhook-based):
    message in a background task, since Meta retries webhooks that respond
    slowly.
 
-## What's Deliberately Out of Scope (for now)
+## Recently Implemented Upgrades
 
-- **Streaming responses** — every reply currently blocks until the full LLM
-  response is back.
-- **Vector DB beyond FAISS** — FAISS is enough at this scale; a thin
-  retriever interface with a Chroma/Qdrant backend would be the next step if
-  the knowledge base grew.
-- **A real reviewer UI for lead approval** — `api.py`'s `/approve` endpoint
-  is the right shape for this, but there's no admin panel calling it yet;
-  today that's the CLI prompt, or auto-approval in the demo/Gradio front-ends.
+- **Real-Time Token Streaming:** Progressive Server-Sent Events (`POST /chat/stream`) yielding live response tokens to the front end.
+- **Visual Admin CRM Reviewer Panel:** Visual modal backed by `GET /api/admin/verify` and `GET /api/leads/export` for real-time lead management, search, metrics, and CSV downloads.
+- **In-Chat Video ROI Calculator:** Embedded dynamic estimator for hours saved and subscription value.
+
+## Future Exploration (Out of Scope for Now)
+
+- **Vector DB Scale-out:** FAISS is optimal for this local knowledge base; a distributed backend (e.g. Chroma, Qdrant, or Pinecone) can be attached if the documentation grows to thousands of pages.
+- **Voice/Audio Modal:** Real-time speech-to-text input and natural voice audio previews.
 
 ## Notes
 

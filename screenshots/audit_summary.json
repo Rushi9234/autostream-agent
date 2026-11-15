@@ -1,0 +1,97 @@
+{
+  "screenshots_count": 14,
+  "screenshots": [
+    "01_home_light_studio.png",
+    "02_home_dark_obsidian.png",
+    "03_interactive_roi_calculator.png",
+    "04_pricing_inquiry_and_cards.png",
+    "05_creator_onboarding_chat.png",
+    "06_context_drawer_onboarding.png",
+    "07_lead_review_confirmation.png",
+    "08_admin_crm_auth_gate.png",
+    "09_admin_crm_unlocked_leads_table.png",
+    "10_admin_crm_search_filter.png",
+    "11_mobile_sidebar_drawer.png",
+    "12_mobile_chat_workspace.png",
+    "13_refund_policy_context.png",
+    "14_off_topic_guardrail.png"
+  ],
+  "observations": [
+    {
+      "feature": "Light Studio Home View",
+      "details": "Verified Light UI. Theme data-theme='light'. Navbar, sidebar, activity brief, and cards rendered.",
+      "is_bug": false
+    },
+    {
+      "feature": "Dark Obsidian Theme View",
+      "details": "Verified Dark UI. Theme data-theme='dark'. Warm amber accents with obsidian surfaces.",
+      "is_bug": false
+    },
+    {
+      "feature": "ROI Calculator Card",
+      "details": "Sliders verified. Hours saved: 60 hrs, Value: $2,100, Tier: Pro ($79)",
+      "is_bug": false
+    },
+    {
+      "feature": "Token Streaming Verification",
+      "details": "SSE streaming succeeded cleanly without renderMarkdown or formatting errors.",
+      "is_bug": false
+    },
+    {
+      "feature": "Name Extraction Priority Verification",
+      "details": "Successfully extracted Name='David Miller', Platform='YouTube', Email='david@creators.io'.",
+      "is_bug": false
+    },
+    {
+      "feature": "Drawer Slot Persistence Verification",
+      "details": "Context drawer correctly preserved 3/3 registered slots (David Miller, YouTube, david@creators.io).",
+      "is_bug": false
+    },
+    {
+      "feature": "Lead Review & Confirmation State",
+      "details": "Captured completed lead status in chat stream.",
+      "is_bug": false
+    },
+    {
+      "feature": "Admin CRM Security Verification",
+      "details": "Invalid passcode correctly rejected with error banner. CRM data remains locked.",
+      "is_bug": false
+    },
+    {
+      "feature": "Admin CRM Leads Table",
+      "details": "Authenticated successfully. Metrics: Total Leads=4, Top Platform=YouTube (4).",
+      "is_bug": false
+    },
+    {
+      "feature": "Admin CRM Search Filtering",
+      "details": "Table filtered in real-time to match 'David'.",
+      "is_bug": false
+    },
+    {
+      "feature": "Mobile View (Sidebar Open)",
+      "details": "390px viewport with slide-over sidebar drawer and overlay.",
+      "is_bug": false
+    },
+    {
+      "feature": "Mobile Sidebar Dismissal Verification",
+      "details": "Sidebar drawer closed smoothly via dedicated mobile close button.",
+      "is_bug": false
+    },
+    {
+      "feature": "Mobile View (Chat & ROI Calculator)",
+      "details": "Mobile composer, capability cards, and embedded ROI card formatted cleanly for narrow screens.",
+      "is_bug": false
+    },
+    {
+      "feature": "Refund Policy Query",
+      "details": "Assistant retrieved and answered refund policy accurately from verified KB.",
+      "is_bug": false
+    },
+    {
+      "feature": "Off-Topic Guardrail Test",
+      "details": "Assistant politely declined off-topic query without hallucinating, steering back to AutoStream.",
+      "is_bug": false
+    }
+  ],
+  "bugs_noted": []
+}

@@ -332,6 +332,12 @@ hitting a live API, so it runs the same with or without a configured key.
 
 ## Deploying
 
+**Render (1-Click Cloud Deployment):**
+1. Sign up on [Render.com](https://render.com) (free) and click **New +** $\rightarrow$ **Blueprint**.
+2. Connect your `autostream-agent` repository — Render will read [`render.yaml`](render.yaml) automatically.
+3. Enter your `GOOGLE_API_KEY` under Environment Variables and click **Apply**.
+4. Render deploys the live Web Studio with automatic SSL, `/health` monitoring, and continuous deployment on every git push.
+
 **FastAPI, anywhere that runs Python:**
 
 ```bash

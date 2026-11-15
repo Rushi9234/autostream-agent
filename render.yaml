@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: autostream-agent
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: AUTO_APPROVE_DEMO_LEADS
+        value: "true"
+      - key: ADMIN_TOKEN
+        value: autostream_admin_secret_2026
+      - key: GOOGLE_API_KEY
+        sync: false

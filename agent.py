@@ -109,12 +109,12 @@ def get_llm(model_name="gemini-2.5-flash"):
     return ChatGoogleGenerativeAI(model=model_name, temperature=0.2, max_retries=0)
 
 
-def invoke_llm(prompt, retries=2, backoff_seconds=0.2):
+def invoke_llm(prompt, retries=1, backoff_seconds=0.1):
     """Call the LLM with retries and fast model fallbacks for high reliability."""
-    base_models = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.5-flash-lite"]
+    base_models = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
     models_to_try = [m for m in base_models if m not in _EXHAUSTED_MODELS]
     if not models_to_try:
-        models_to_try = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+        models_to_try = ["gemini-2.5-flash"]
 
     last_error = None
     for attempt in range(retries + 1):
@@ -146,6 +146,7 @@ class AgentState(TypedDict, total=False):
     intent: str
     lead_info: dict
     lead_captured: bool
+    lead_in_progress: bool
     invalid_email_attempt: bool
     sources: list[dict]
 
@@ -168,10 +169,95 @@ def latest_user_message(messages):
     return ""
 
 
-def extract_slots_from_message(user_message, current_lead_info):
-    """Extract lead slots (name, email, platform) using fast regex + LEAD_EXTRACTION_PROMPT."""
+EXCLUDED_NAME_WORDS = {
+    "hi", "hello", "hey", "good", "morning", "evening", "greetings", "howdy",
+    "thanks", "thank", "thx", "bye", "goodbye", "cya", "see", "ya", "later",
+    "yes", "yeah", "yep", "sure", "ok", "okay", "alright", "no", "nope", "nah",
+    "pro", "basic", "plan", "plans", "pricing", "price", "cost", "features", "feature",
+    "policy", "policies", "refund", "refunds", "support", "help", "contact", "team",
+    "connect", "question", "questions", "tell", "show", "give", "info", "information",
+    "youtube", "tiktok", "instagram", "twitch", "twitter", "facebook", "vimeo", "x",
+    "email", "mail", "gmail", "platform", "channel", "handle", "username", "account",
+    "sign", "signup", "register", "join", "start", "get", "started", "onboarding",
+    "roi", "calculator", "raw", "video", "videos", "editing", "editor", "hours",
+    "saved", "value", "creator", "tier", "select", "recommend", "recommended",
+    "what", "who", "where", "when", "why", "how", "which", "can", "could", "would",
+    "should", "will", "do", "does", "did", "is", "are", "am", "was", "were", "be",
+    "been", "being", "have", "has", "had", "my", "your", "his", "her", "their", "our",
+    "the", "a", "an", "this", "that", "these", "those", "here", "there", "ready",
+    "interested", "looking", "excited", "trying", "hoping", "planning", "wanting",
+    "wondering", "just", "also", "currently", "going", "happy", "thrilled", "glad",
+    "super", "very", "not", "need", "like", "love", "please", "with", "at", "for",
+    "from", "on", "in", "to", "by", "about", "into", "over", "after"
+}
+
+
+def check_personal_state_query(user_message: str, lead_info: dict, lead_captured: bool = False) -> str | None:
+    """Answer personal state queries (e.g. what is my email/name/platform/details) directly from conversation state."""
+    msg = user_message.lower().strip()
+    msg_clean = re.sub(r"[?!.,'\"]", " ", msg).strip()
+    info = lead_info or {}
+
+    # If the user is providing or updating details, it's NOT a state lookup query!
+    if EMAIL_SEARCH_REGEX.search(user_message) or any(w in msg.split() for w in ("update", "change", "replace", "switch")):
+        return None
+
+    is_email_query = bool(re.search(r"\b(?:(?:what(?:s| is| was)?|tell me|show me|do you (?:have|know)) (?:my|the) (?:e-?mail|mail)|what mail|what is mail)\b", msg_clean)) or msg in ("my email", "my mail", "email?", "mail?")
+    is_name_query = bool(re.search(r"\b(?:(?:what(?:s| is| was)?|tell me|show me|do you (?:have|know)) (?:my|the) name|who am i)\b", msg_clean)) or msg in ("my name", "name?")
+    is_platform_query = bool(re.search(r"\b(?:(?:what(?:s| is| was)?|tell me|show me|do you (?:have|know)) (?:my|the) platform|which platform did i (?:say|choose|pick|give))\b", msg_clean)) or msg in ("my platform", "platform?")
+    is_details_query = bool(re.search(r"\b(?:what (?:details|info|data|information) do you (?:have|know)|what(?:s| is) (?:saved|recorded) for me|what do you know about me|show my (?:details|info|data))\b", msg_clean)) or msg in ("my details", "my info")
+
+    if is_email_query:
+        email = info.get("email")
+        if email:
+            return f"Your email on file is {email}."
+        return "I don't have your email saved yet. What's the best email to reach you at?"
+
+    if is_name_query:
+        name = info.get("name")
+        if name:
+            return f"You told me your name is {name}."
+        return "I don't have your name yet. Could I get your name?"
+
+    if is_platform_query:
+        platform = info.get("platform")
+        if platform:
+            return f"You mentioned you create content on {platform}."
+        return "I don't have your platform saved yet. Which platform do you create content on (YouTube, Instagram, TikTok, etc.)?"
+
+    if is_details_query:
+        name_str = info.get("name", "Not provided yet")
+        email_str = info.get("email", "Not provided yet")
+        plat_str = info.get("platform", "Not provided yet")
+        summary = (
+            f"Here are the details I have saved for you so far:\n"
+            f"- Name: {name_str}\n"
+            f"- Email: {email_str}\n"
+            f"- Platform: {plat_str}"
+        )
+        missing = [f for f in ("name", "email", "platform") if not info.get(f)]
+        if missing and not lead_captured:
+            field_questions = {
+                "name": "could I get your name",
+                "email": "what's the best email to reach you at",
+                "platform": "which platform do you create content on",
+            }
+            asks = [field_questions[f] for f in missing]
+            if len(asks) == 1:
+                q = asks[0][0].upper() + asks[0][1:] + "?"
+            else:
+                q = ", ".join(asks[:-1]) + ", and " + asks[-1] + "?"
+                q = q[0].upper() + q[1:]
+            summary += f"\n\nWhenever you're ready, {q}"
+        return summary
+
+    return None
+
+
+def extract_slots_from_message(user_message, current_lead_info, lead_in_progress=False):
+    """Extract lead slots (name, email, platform) using fast regex + bare name check + LEAD_EXTRACTION_PROMPT."""
     lead_info = dict(current_lead_info or {})
-    user_msg_lower = user_message.lower()
+    user_msg_lower = user_message.lower().strip()
 
     # 1. Fast email search anywhere in the message
     email_match = EMAIL_SEARCH_REGEX.search(user_message)
@@ -210,14 +296,6 @@ def extract_slots_from_message(user_message, current_lead_info):
 
     # 3. Fast name extraction
     if not lead_info.get("name"):
-        NON_NAME_WORDS = {
-            "ready", "interested", "looking", "here", "excited", "trying", "hoping",
-            "planning", "wanting", "signing", "wondering", "just", "also", "currently",
-            "going", "happy", "thrilled", "glad", "a", "an", "the", "on", "using",
-            "from", "so", "new", "already", "super", "very", "not", "sure", "need",
-            "would", "like", "love", "please", "can", "could", "will", "channel",
-            "youtube", "tiktok", "instagram", "twitch", "twitter", "email"
-        }
         # Explicit patterns first (e.g. "my name is John", "name is John", "call me John", "name: John")
         name_match = re.search(
             r"(?:my name is|name is|name:|call me)\s+([a-zA-Z]+)(?:\s+([a-zA-Z]+))?",
@@ -230,10 +308,10 @@ def extract_slots_from_message(user_message, current_lead_info):
             if second.lower() in ("and", "my", "email", "with", "at", "for", "the", "a", "from", "on", "sign", "channel", "youtube", "tiktok", "instagram", "twitch", "twitter"):
                 second = ""
             candidate = f"{first} {second}".strip().title()
-            if candidate.lower() not in ("youtube", "instagram", "tiktok", "pro", "basic", "plan", "the", "a") and first.lower() not in NON_NAME_WORDS:
+            if candidate.lower() not in ("youtube", "instagram", "tiktok", "pro", "basic", "plan", "the", "a") and first.lower() not in EXCLUDED_NAME_WORDS:
                 lead_info["name"] = candidate
         else:
-            # Weaker pronoun check: "I am John", "I'm John" (rejecting common adjectives/verbs)
+            # Weaker pronoun check: "I am John", "I'm John"
             weak_match = re.search(
                 r"(?:i am|i'm)\s+([a-zA-Z]+)(?:\s+([a-zA-Z]+))?",
                 user_message,
@@ -242,7 +320,7 @@ def extract_slots_from_message(user_message, current_lead_info):
             if weak_match:
                 first = weak_match.group(1).strip()
                 second = (weak_match.group(2) or "").strip()
-                if first.lower() not in NON_NAME_WORDS:
+                if first.lower() not in EXCLUDED_NAME_WORDS:
                     if second.lower() in ("and", "my", "email", "with", "at", "for", "the", "a", "from", "on", "sign", "channel", "interested", "ready", "looking", "youtube", "tiktok", "instagram", "twitch"):
                         second = ""
                     candidate = f"{first} {second}".strip().title()
@@ -250,8 +328,7 @@ def extract_slots_from_message(user_message, current_lead_info):
                         lead_info["name"] = candidate
 
         if not lead_info.get("name") and email_match:
-            # If an email is present in the text (e.g. "Rushikesh Kedar rushikedar40@gmail.com for youtube"),
-            # strip email, known platform names, prepositions, and channel keywords
+            # If an email is present in the text (e.g. "Rushikesh Kedar rushikedar40@gmail.com for youtube")
             rem = EMAIL_SEARCH_REGEX.sub("", user_message).strip()
             rem = re.sub(r"[,:;!?-]", " ", rem).strip()
             rem = re.sub(r"\b(youtube|tiktok|instagram|twitch|twitter|facebook|vimeo|x)\b", " ", rem, flags=re.IGNORECASE)
@@ -260,13 +337,25 @@ def extract_slots_from_message(user_message, current_lead_info):
             words = rem.split()
             if 1 <= len(words) <= 4 and all(w.isalpha() for w in words):
                 candidate = " ".join(w.capitalize() for w in words)
-                if candidate.lower() not in ("youtube", "instagram", "tiktok", "pro", "basic", "plan", "the", "a", "hi", "hello", "yes", "no") and words[0].lower() not in NON_NAME_WORDS:
+                if candidate.lower() not in ("youtube", "instagram", "tiktok", "pro", "basic", "plan", "the", "a", "hi", "hello", "yes", "no") and words[0].lower() not in EXCLUDED_NAME_WORDS:
                     lead_info["name"] = candidate
 
-    # 4. If message contains lead keywords or email, run full LLM extraction for edge cases
-    has_lead_tokens = ("@" in user_msg_lower) or any(kw in user_msg_lower for kw in ("name", "email", "sign up", "sign me up", "my name", "i am", "call me", "reach me at"))
+        # Bare name check: If message is 1-3 clean alphabetic words without inquiry, excluded, or punctuation terms
+        if not lead_info.get("name") and not email_match:
+            clean = re.sub(r"[,:;!?'\"]", " ", user_message).strip()
+            words = clean.split()
+            if 1 <= len(words) <= 3:
+                if all(w.isalpha() and len(w) >= 2 for w in words):
+                    if all(w.lower() not in EXCLUDED_NAME_WORDS for w in words):
+                        candidate = " ".join(w.capitalize() for w in words)
+                        lead_info["name"] = candidate
 
-    if has_lead_tokens and not all(lead_info.get(f) for f in ("name", "email", "platform")):
+    # 4. If message contains lead keywords or in lead flow, run full LLM extraction for conversational phrasing
+    has_lead_tokens = ("@" in user_msg_lower) or any(kw in user_msg_lower for kw in ("name", "email", "sign up", "sign me up", "my name", "i am", "call me", "reach me at"))
+    should_run_llm_extract = (has_lead_tokens or lead_in_progress) and not all(lead_info.get(f) for f in ("name", "email", "platform"))
+    is_pure_question = "?" in user_message or user_msg_lower.startswith(("how", "what", "where", "why", "when", "can", "does"))
+
+    if should_run_llm_extract and not is_pure_question:
         prompt = LEAD_EXTRACTION_PROMPT.format(
             name=lead_info.get("name"),
             email=lead_info.get("email"),
@@ -281,7 +370,7 @@ def extract_slots_from_message(user_message, current_lead_info):
             if value and str(value).strip().lower() != "null" and not lead_info.get(field):
                 val_str = str(value).strip()
                 if field == "email":
-                    if is_valid_email(val_str):
+                    if is_valid_email(val_str) and EMAIL_SEARCH_REGEX.search(user_message):
                         lead_info["email"] = val_str.lower()
                     else:
                         invalid_email_attempt = True
@@ -308,11 +397,30 @@ def route_turn(state: AgentState):
 
     lead_info = dict(state.get("lead_info", {}) or {})
     already_captured = state.get("lead_captured", False)
+    lead_in_progress = state.get("lead_in_progress", False)
+
+    lead_intent_phrases = (
+        "sign up", "sign me up", "sign up for", "i want to get", "i'd like to get",
+        "get started with", "try the pro", "onboarding", "subscribe", "buy pro", "try pro"
+    )
+    if any(phrase in user_lower for phrase in lead_intent_phrases):
+        lead_in_progress = True
 
     # Extract slots to preserve lead info even if user asks a question
-    updated_lead_info, invalid_email = extract_slots_from_message(user_message, lead_info)
-    in_lead_flow = any(updated_lead_info.get(f) for f in ("name", "email", "platform"))
-    missing_slots = [f for f in ("name", "email", "platform") if not updated_lead_info.get(f)]
+    updated_lead_info, invalid_email = extract_slots_from_message(user_message, lead_info, lead_in_progress)
+    if any(updated_lead_info.get(f) for f in ("name", "email", "platform")):
+        lead_in_progress = True
+
+    # Personal state queries check (e.g. what is my email / name / platform / details)
+    state_reply = check_personal_state_query(user_message, updated_lead_info, already_captured)
+    if state_reply:
+        return {
+            "intent": "inquiry",
+            "lead_info": updated_lead_info,
+            "lead_captured": already_captured,
+            "lead_in_progress": lead_in_progress,
+            "invalid_email_attempt": invalid_email,
+        }
 
     # Fast-path 1: Inquiry keywords check (e.g. pricing, features, policies, refund, cost, team, connect)
     inquiry_keywords = (
@@ -325,38 +433,43 @@ def route_turn(state: AgentState):
     )
     is_explicit_question = "?" in user_message or any(kw in user_lower for kw in ("how", "what", "can", "does", "is there", "why", "which"))
     has_inquiry_kw = any(kw in user_lower for kw in inquiry_keywords)
-    has_lead_submission = ("@" in user_lower) or any(phrase in user_lower for phrase in ("my name", "i am", "call me", "sign me up", "sign up for", "i want to get", "i'd like to get", "get started with"))
+    has_lead_submission = ("@" in user_lower) or any(phrase in user_lower for phrase in lead_intent_phrases)
 
     if has_inquiry_kw and (is_explicit_question or not has_lead_submission):
         return {
             "intent": "inquiry",
             "lead_info": updated_lead_info,
             "lead_captured": already_captured,
+            "lead_in_progress": lead_in_progress,
             "invalid_email_attempt": invalid_email,
         }
 
-    # If user made an invalid email attempt, or is mid-lead-flow answering questions without asking an inquiry, stay in lead flow!
+    # If user made an invalid email attempt, stay in lead flow!
     if invalid_email:
         return {
             "intent": "high_intent",
             "lead_info": updated_lead_info,
             "lead_captured": already_captured,
+            "lead_in_progress": True,
             "invalid_email_attempt": True,
             "sources": [],
         }
 
-    if in_lead_flow and not already_captured and missing_slots:
-        # User is answering slot questions. If waiting for email and message is not an explicit inquiry, keep in lead flow!
-        if not updated_lead_info.get("email"):
-            if any(tok in user_lower for tok in ("gmail", "yahoo", "outlook", "mail", ".com", ".net", ".io")) or "@" in user_message or any(c.isdigit() for c in user_message):
-                invalid_email = True
-        return {
-            "intent": "high_intent",
-            "lead_info": updated_lead_info,
-            "lead_captured": already_captured,
-            "invalid_email_attempt": invalid_email,
-            "sources": [],
-        }
+    missing_slots = [f for f in ("name", "email", "platform") if not updated_lead_info.get(f)]
+
+    if (lead_in_progress or any(updated_lead_info.get(f) for f in ("name", "email", "platform"))):
+        if not already_captured or has_lead_submission or EMAIL_SEARCH_REGEX.search(user_message) or any(w in user_lower for w in ("update", "change", "new")):
+            if not updated_lead_info.get("email") and not already_captured:
+                if any(tok in user_lower for tok in ("gmail", "yahoo", "outlook", "mail", ".com", ".net", ".io")) or "@" in user_message:
+                    invalid_email = True
+            return {
+                "intent": "high_intent",
+                "lead_info": updated_lead_info,
+                "lead_captured": already_captured,
+                "lead_in_progress": not already_captured,
+                "invalid_email_attempt": invalid_email,
+                "sources": [],
+            }
 
     # Fast-path 2: Simple casual greeting check
     casual_greetings = ("hi", "hello", "hey", "good morning", "good evening", "greetings", "who are you", "what can you do")
@@ -365,6 +478,7 @@ def route_turn(state: AgentState):
             "intent": "casual",
             "lead_info": updated_lead_info,
             "lead_captured": already_captured,
+            "lead_in_progress": lead_in_progress,
             "invalid_email_attempt": invalid_email,
         }
 
@@ -376,24 +490,23 @@ def route_turn(state: AgentState):
     raw = invoke_llm(prompt)
 
     if raw is None:
-        # Check local FAISS vector store to see if question matches KB documentation!
         try:
             kb_docs = retrieve(user_message, k=1)
             if kb_docs and len(kb_docs) > 0 and len(kb_docs[0].strip()) > 15:
                 intent = "inquiry"
-            elif in_lead_flow and not already_captured:
+            elif (lead_in_progress or any(updated_lead_info.get(f) for f in ("name", "email", "platform"))) and not already_captured:
                 intent = "high_intent"
             else:
                 intent = "casual"
         except Exception:
-            intent = "high_intent" if in_lead_flow and not already_captured else "inquiry"
+            intent = "high_intent" if (lead_in_progress and not already_captured) else "inquiry"
     else:
         raw_lower = raw.lower()
         if "inquiry" in raw_lower:
             intent = "inquiry"
         elif "high_intent" in raw_lower:
             intent = "high_intent"
-        elif in_lead_flow and not already_captured:
+        elif (lead_in_progress or any(updated_lead_info.get(f) for f in ("name", "email", "platform"))) and not already_captured:
             intent = "high_intent"
         else:
             intent = "casual"
@@ -402,6 +515,7 @@ def route_turn(state: AgentState):
         "intent": intent,
         "lead_info": updated_lead_info,
         "lead_captured": already_captured,
+        "lead_in_progress": lead_in_progress,
         "invalid_email_attempt": invalid_email,
     }
 
@@ -411,6 +525,19 @@ def casual_node(state: AgentState):
     """Handle greetings and small talk with deterministic fallback if LLM is offline/rate-limited."""
     user_message = latest_user_message(state["messages"])
     history = format_history(state["messages"][:-1])
+    lead_info = state.get("lead_info", {}) or {}
+    already_captured = state.get("lead_captured", False)
+    lead_in_progress = state.get("lead_in_progress", False)
+
+    state_reply = check_personal_state_query(user_message, lead_info, already_captured)
+    if state_reply:
+        return {
+            "messages": [AIMessage(content=state_reply)],
+            "lead_info": lead_info,
+            "lead_captured": already_captured,
+            "lead_in_progress": lead_in_progress,
+            "sources": [],
+        }
 
     prompt = CASUAL_REPLY_PROMPT.format(history=history, user_message=user_message)
     reply = invoke_llm(prompt)
@@ -420,13 +547,35 @@ def casual_node(state: AgentState):
         if any(kw in user_lower for kw in ("hi", "hello", "hey", "good morning", "good evening", "greetings")):
             reply = "Hello! I'm AutoStream's AI Assistant. I can help with questions about AutoStream features, pricing plans, or setting up a Pro plan subscription. How can I help you today?"
         elif any(kw in user_lower for kw in ("thanks", "thank you", "thx")):
-            reply = "You're welcome! Let info know if you have any other questions about AutoStream."
+            reply = "You're welcome! Let me know if you have any other questions about AutoStream."
         elif any(kw in user_lower for kw in ("bye", "goodbye", "see ya")):
             reply = "Thanks for visiting AutoStream! Have a great day."
         else:
             reply = "I'm AutoStream's virtual assistant. I can help answer questions about our automated video editing features, pricing plans, or team support options. What would you like to know?"
 
-    return {"messages": [AIMessage(content=reply)], "sources": []}
+    # If lead is in progress and not captured, append gentle reminder
+    missing = [f for f in ("name", "email", "platform") if not lead_info.get(f)]
+    if lead_in_progress and missing and not already_captured:
+        field_questions = {
+            "name": "could I get your name",
+            "email": "what's the best email to reach you at",
+            "platform": "which platform do you create content on (YouTube, Instagram, TikTok, etc.)",
+        }
+        next_asks = [field_questions[f] for f in missing]
+        if len(next_asks) == 1:
+            bridge_q = next_asks[0][0].upper() + next_asks[0][1:] + "?"
+        else:
+            bridge_q = ", ".join(next_asks[:-1]) + ", and " + next_asks[-1] + "?"
+            bridge_q = bridge_q[0].upper() + bridge_q[1:]
+        reply = f"{reply}\n\n(Whenever you're ready, {bridge_q.lower()})"
+
+    return {
+        "messages": [AIMessage(content=reply)],
+        "lead_info": lead_info,
+        "lead_captured": already_captured,
+        "lead_in_progress": lead_in_progress,
+        "sources": [],
+    }
 
 
 @log_node("rag_node")
@@ -436,15 +585,33 @@ def rag_node(state: AgentState):
     history = format_history(state["messages"][:-1])
     lead_info = state.get("lead_info", {}) or {}
     already_captured = state.get("lead_captured", False)
+    lead_in_progress = state.get("lead_in_progress", False)
 
+    # 1. Check for personal state queries first
+    state_reply = check_personal_state_query(user_message, lead_info, already_captured)
+    if state_reply:
+        return {
+            "messages": [AIMessage(content=state_reply)],
+            "lead_info": lead_info,
+            "lead_captured": already_captured,
+            "lead_in_progress": lead_in_progress,
+            "sources": [],
+        }
+
+    # 2. Retrieve KB context
     try:
         context, sources = retrieve_with_sources(user_message, k=3)
     except Exception as exc:
         logger.error("RAG retrieval failed: %s", exc)
-        return {"messages": [AIMessage(content=LLM_UNAVAILABLE_REPLY)], "sources": []}
+        return {
+            "messages": [AIMessage(content=LLM_UNAVAILABLE_REPLY)],
+            "lead_info": lead_info,
+            "lead_captured": already_captured,
+            "lead_in_progress": lead_in_progress,
+            "sources": [],
+        }
 
     if not context or not context.strip():
-        # Check off-topic vs team/support fallback
         user_lower = user_message.lower()
         if any(kw in user_lower for kw in ("team", "connect", "contact", "support", "help")):
             fallback_text = "AutoStream provides 24/7 priority support for Enterprise customers and standard email support for Pro plan users."
@@ -452,11 +619,15 @@ def rag_node(state: AgentState):
             return {
                 "messages": [AIMessage(content=fallback_text)],
                 "lead_info": lead_info,
+                "lead_captured": already_captured,
+                "lead_in_progress": lead_in_progress,
                 "sources": sources,
             }
         return {
             "messages": [AIMessage(content=OFF_TOPIC_REPLY)],
             "lead_info": lead_info,
+            "lead_captured": already_captured,
+            "lead_in_progress": lead_in_progress,
             "sources": [],
         }
 
@@ -468,7 +639,6 @@ def rag_node(state: AgentState):
     raw_reply = invoke_llm(prompt)
 
     if not raw_reply:
-        # Fallback to direct KB context synthesis if external LLM API is rate-limited or unavailable
         clean_lines = [
             line.strip("- ").strip() for line in context.split("\n")
             if line.strip() and not line.startswith("[") and not line.startswith("---")
@@ -488,7 +658,7 @@ def rag_node(state: AgentState):
 
     # Dynamic lead resumption if mid-lead-flow
     missing = [f for f in ("name", "email", "platform") if not lead_info.get(f)]
-    if lead_info and missing and not already_captured:
+    if (lead_info or lead_in_progress) and missing and not already_captured:
         field_questions = {
             "name": "could I get your name",
             "email": "what's the best email to reach you at",
@@ -498,7 +668,7 @@ def rag_node(state: AgentState):
         if len(next_asks) == 1:
             bridge_q = next_asks[0][0].upper() + next_asks[0][1:] + "?"
         else:
-            bridge_q = ", ".join(next_asks[:-1]) + ", " + next_asks[-1] + "?"
+            bridge_q = ", ".join(next_asks[:-1]) + ", and " + next_asks[-1] + "?"
             bridge_q = bridge_q[0].upper() + bridge_q[1:]
 
         reply = f"{reply}\n\n(By the way, I still have your details saved. Whenever you're ready, {bridge_q.lower()})"
@@ -506,9 +676,10 @@ def rag_node(state: AgentState):
     return {
         "messages": [AIMessage(content=reply)],
         "lead_info": lead_info,
+        "lead_captured": already_captured,
+        "lead_in_progress": lead_in_progress,
         "sources": sources,
     }
-
 
 
 def parse_extraction_json(raw):
@@ -525,7 +696,6 @@ def parse_extraction_json(raw):
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
-        # Fallback regex search for JSON object inside raw string
         match = re.search(r"\{.*\}", cleaned, re.DOTALL)
         if match:
             try:
@@ -543,16 +713,16 @@ def lead_node(state: AgentState):
     user_message = latest_user_message(state["messages"])
     lead_info = dict(state.get("lead_info", {}) or {})
     already_captured = state.get("lead_captured", False)
+    lead_in_progress = True
 
-    # Route_turn already extracted slots into state. Use them directly to avoid duplicate LLM latency
     invalid_email = state.get("invalid_email_attempt", False)
-    if not any(lead_info.get(f) for f in ("name", "email", "platform")):
-        updated_info, invalid_email = extract_slots_from_message(user_message, lead_info)
-        lead_info.update(updated_info)
+    updated_info, inv = extract_slots_from_message(user_message, lead_info, lead_in_progress)
+    lead_info.update(updated_info)
+    if inv:
+        invalid_email = True
 
     # If user has already completed onboarding in this thread:
     if already_captured and all(lead_info.get(f) for f in ("name", "email", "platform")):
-        # Check if user explicitly provided a new email or new platform to update
         email_match = EMAIL_SEARCH_REGEX.search(user_message)
         has_new_details = False
         if email_match:
@@ -577,6 +747,7 @@ def lead_node(state: AgentState):
                 "messages": [AIMessage(content=reply)],
                 "lead_info": lead_info,
                 "lead_captured": True,
+                "lead_in_progress": False,
                 "sources": [],
             }
         else:
@@ -593,6 +764,7 @@ def lead_node(state: AgentState):
                 "messages": [AIMessage(content=reply)],
                 "lead_info": lead_info,
                 "lead_captured": True,
+                "lead_in_progress": False,
                 "sources": [],
             }
 
@@ -608,36 +780,45 @@ def lead_node(state: AgentState):
             "messages": [AIMessage(content=reply)],
             "lead_info": lead_info,
             "lead_captured": False,
+            "lead_in_progress": True,
             "sources": [],
         }
 
-    had_any_before = any(lead_info.get(f) for f in ("name", "email", "platform"))
-    intro = ""
-    if not had_any_before:
-        intro = "Awesome, I'd love to help you get started on the Pro plan! I just need a few quick details. "
+    prefix = ""
+    if invalid_email:
+        prefix = "That email address format doesn't look quite right (please check for '@' and domain, e.g. name@example.com). "
+    elif lead_info.get("name") and len(missing) < 3:
+        if not lead_info.get("email") and not lead_info.get("platform"):
+            prefix = f"Great, {lead_info['name']}! "
+        elif not lead_info.get("email") and lead_info.get("platform"):
+            prefix = f"Great, {lead_info['name']}! Got your {lead_info['platform']} channel. "
+        elif lead_info.get("email") and not lead_info.get("platform"):
+            prefix = f"Great, {lead_info['name']}! "
+    elif not lead_info.get("name") and lead_info.get("platform"):
+        prefix = f"Got it, {lead_info['platform']}! "
 
-    if invalid_email or state.get("invalid_email_attempt"):
-        email_warning = "That email address format doesn't look quite right (please check for '@' and domain, e.g. name@example.com). "
-    else:
-        email_warning = ""
+    if not any(lead_info.get(f) for f in ("name", "email", "platform")) and not invalid_email:
+        prefix = "Awesome, I'd love to help you get started on the Pro plan! I just need a few quick details. "
 
     field_questions = {
         "name": "could I get your name",
         "email": "what's the best email to reach you at",
-        "platform": "and which platform do you create content on (YouTube, Instagram, TikTok, etc.)",
+        "platform": "which platform do you create content on (YouTube, Instagram, TikTok, etc.)",
     }
     asks = [field_questions[f] for f in missing]
     if len(asks) == 1:
         question = asks[0][0].upper() + asks[0][1:] + "?"
+    elif len(asks) == 2:
+        question = asks[0][0].upper() + asks[0][1:] + ", and " + asks[1] + "?"
     else:
-        question = ", ".join(asks[:-1]) + ", " + asks[-1] + "?"
-        question = question[0].upper() + question[1:]
+        question = asks[0][0].upper() + asks[0][1:] + ", " + asks[1] + ", and " + asks[2] + "?"
 
-    reply = (intro + email_warning + question).strip()
+    reply = (prefix + question).strip()
     return {
         "messages": [AIMessage(content=reply)],
         "lead_info": lead_info,
         "lead_captured": already_captured,
+        "lead_in_progress": True,
         "sources": [],
     }
 
@@ -664,13 +845,13 @@ def escalate_node(state: AgentState):
             f"to get you started on the Pro plan for your {lead_info['platform']} "
             f"channel. Welcome to AutoStream!"
         )
-        return {"messages": [AIMessage(content=reply)], "lead_captured": True, "lead_info": lead_info, "sources": []}
+        return {"messages": [AIMessage(content=reply)], "lead_captured": True, "lead_in_progress": False, "lead_info": lead_info, "sources": []}
 
     reply = (
         "Thanks for your interest! Our team wants to follow up personally before "
         "finalizing this — someone will reach out to go over the details with you."
     )
-    return {"messages": [AIMessage(content=reply)], "lead_captured": False, "lead_info": {}, "sources": []}
+    return {"messages": [AIMessage(content=reply)], "lead_captured": False, "lead_in_progress": False, "lead_info": {}, "sources": []}
 
 
 # -----------------------------

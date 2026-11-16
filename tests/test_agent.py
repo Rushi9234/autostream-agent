@@ -229,3 +229,36 @@ def test_rag_node_falls_back_gracefully_when_retrieve_fails(monkeypatch):
 
     assert result["messages"][0].content == agent.LLM_UNAVAILABLE_REPLY
 
+
+def test_extract_slots_bare_name():
+    lead_info, invalid_email = agent.extract_slots_from_message("kedar rushi", {}, lead_in_progress=True)
+    assert lead_info.get("name") == "Kedar Rushi"
+    assert not invalid_email
+
+    lead_info, _ = agent.extract_slots_from_message("Alex", {}, lead_in_progress=True)
+    assert lead_info.get("name") == "Alex"
+
+
+def test_extract_slots_detects_malformed_email():
+    lead_info, invalid_email = agent.extract_slots_from_message("rushikedar40gmail", {}, lead_in_progress=True)
+    assert invalid_email is True
+    assert lead_info.get("email") is None
+
+    lead_info, invalid_email = agent.extract_slots_from_message("rushi@40", {}, lead_in_progress=True)
+    assert invalid_email is True
+    assert lead_info.get("email") is None
+
+
+def test_check_personal_state_queries():
+    state_info = {"name": "Kedar Rushi", "email": "rushikedar40@gmail.com", "platform": "YouTube"}
+    reply_email = agent.check_personal_state_query("what is my mail", state_info, lead_captured=True)
+    assert "rushikedar40@gmail.com" in reply_email
+
+    reply_name = agent.check_personal_state_query("what is my name", state_info, lead_captured=True)
+    assert "Kedar Rushi" in reply_name
+
+    reply_details = agent.check_personal_state_query("what details do you have", state_info, lead_captured=True)
+    assert "Kedar Rushi" in reply_details
+    assert "rushikedar40@gmail.com" in reply_details
+    assert "YouTube" in reply_details
+

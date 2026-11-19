@@ -105,16 +105,16 @@ LLM_UNAVAILABLE_REPLY = (
 
 _EXHAUSTED_MODELS = set()
 
-def get_llm(model_name="gemini-2.5-flash"):
+def get_llm(model_name="gemini-2.5-flash-lite"):
     return ChatGoogleGenerativeAI(model=model_name, temperature=0.2, max_retries=0)
 
 
 def invoke_llm(prompt, retries=1, backoff_seconds=0.1):
     """Call the LLM with retries and fast model fallbacks for high reliability."""
-    base_models = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+    base_models = ["gemini-2.5-flash-lite", "gemini-2.5-flash"]
     models_to_try = [m for m in base_models if m not in _EXHAUSTED_MODELS]
     if not models_to_try:
-        models_to_try = ["gemini-2.5-flash"]
+        models_to_try = ["gemini-2.5-flash-lite", "gemini-2.5-flash"]
 
     last_error = None
     for attempt in range(retries + 1):
@@ -545,11 +545,11 @@ def casual_node(state: AgentState):
     if not reply:
         user_lower = user_message.lower().strip()
         if any(kw in user_lower for kw in ("hi", "hello", "hey", "good morning", "good evening", "greetings")):
-            reply = "Hello! I'm AutoStream's AI Assistant. I can help with questions about AutoStream features, pricing plans, or setting up a Pro plan subscription. How can I help you today?"
-        elif any(kw in user_lower for kw in ("thanks", "thank you", "thx")):
-            reply = "You're welcome! Let me know if you have any other questions about AutoStream."
-        elif any(kw in user_lower for kw in ("bye", "goodbye", "see ya")):
-            reply = "Thanks for visiting AutoStream! Have a great day."
+            reply = "Hello! Welcome to AutoStream Studio. I can answer questions about our video editing features, compare Basic vs. Pro plans, or help you get started. How can I assist you today?"
+        elif any(kw in user_lower for kw in ("thanks", "thank you", "thx", "appreciate it")):
+            reply = "You're very welcome! Feel free to ask if you want to explore more features or test out our Pro plan."
+        elif any(kw in user_lower for kw in ("bye", "goodbye", "see ya", "cya")):
+            reply = "Thanks for visiting AutoStream! Wishing you great success with your video creation."
         else:
             reply = "I'm AutoStream's virtual assistant. I can help answer questions about our automated video editing features, pricing plans, or team support options. What would you like to know?"
 
@@ -578,6 +578,140 @@ def casual_node(state: AgentState):
     }
 
 
+def get_cached_kb_response(user_message: str):
+    """
+    Tier-1 Fast response cache for top standard AutoStream knowledge queries.
+    Returns (reply_text, sources_list) or (None, None).
+    Zero latency, zero external API quota, high quality consultative copy.
+    """
+    msg = user_message.lower().strip()
+
+    # 1. Compare Basic vs Pro
+    if any(k in msg for k in ("compare", "basic vs pro", "pro vs basic", "compare basic and pro")) or (
+        "difference" in msg and ("basic" in msg or "pro" in msg)
+    ):
+        reply = (
+            "Here is a side-by-side comparison of AutoStream's plans:\n\n"
+            "**Basic Plan ($29/month)**:\n"
+            "• Up to 10 video exports per month\n"
+            "• Automated cuts and trimming\n"
+            "• 720p maximum export resolution\n"
+            "• Background music library & standard templates\n"
+            "• Standard business-hours email support\n\n"
+            "**Pro Plan ($79/month)**:\n"
+            "• Unlimited video exports\n"
+            "• Ultra-HD 4K export resolution\n"
+            "• AI-generated captions in multiple languages\n"
+            "• Priority rendering queue & advanced editing templates\n"
+            "• 24/7 dedicated support across email and chat\n\n"
+            "For active creators publishing weekly, the Pro Plan typically pays for itself within the first few videos."
+        )
+        sources = [
+            {"source": "features.txt", "heading": "Basic Plan Features"},
+            {"source": "features.txt", "heading": "Pro Plan Features"},
+            {"source": "pricing_plans.txt", "heading": "Pricing Plans"},
+        ]
+        return reply, sources
+
+    # 2. Pro plan cost & features
+    if any(re.search(p, msg) for p in (
+        r"\bhow much (?:is|does) (?:the )?pro\b",
+        r"\bcost of (?:the )?pro\b",
+        r"\bpro plan (?:price|cost)\b",
+        r"\bprice of (?:the )?pro\b",
+    )):
+        reply = (
+            "The **Pro Plan is $79 per month**. It is built for active video creators, "
+            "providing unlimited video exports, 4K resolution, multilingual AI captions, "
+            "priority render queue access, and 24/7 support across email and chat."
+        )
+        sources = [
+            {"source": "pricing_plans.txt", "heading": "Pro Plan"},
+            {"source": "features.txt", "heading": "Pro Plan Features"},
+        ]
+        return reply, sources
+
+    # 3. Basic plan cost & features
+    if any(re.search(p, msg) for p in (
+        r"\bhow much (?:is|does) (?:the )?basic\b",
+        r"\bcost of (?:the )?basic\b",
+        r"\bbasic plan (?:price|cost)\b",
+        r"\bprice of (?:the )?basic\b",
+    )):
+        reply = (
+            "The **Basic Plan is $29 per month**. It includes up to 10 video exports per month, "
+            "720p maximum resolution, automated cuts & trimming, background music library, "
+            "standard templates, and business-hours email support."
+        )
+        sources = [
+            {"source": "pricing_plans.txt", "heading": "Basic Plan"},
+            {"source": "features.txt", "heading": "Basic Plan Features"},
+        ]
+        return reply, sources
+
+    # 4. Refund policy
+    if any(k in msg for k in ("refund policy", "refunds", "money back", "can i get a refund", "return policy")) or (
+        "refund" in msg and any(w in msg for w in ("what", "how", "policy", "days", "guarantee"))
+    ):
+        reply = (
+            "AutoStream offers refunds within **7 days of your original purchase date**. "
+            "After 7 days have passed from the purchase date, no refunds are provided."
+        )
+        sources = [
+            {"source": "company_policies.txt", "heading": "Refund Policy"},
+        ]
+        return reply, sources
+
+    # 5. Support policy
+    if any(k in msg for k in ("support policy", "support hours", "customer support", "24/7 support", "how does support work")):
+        reply = (
+            "AutoStream provides two levels of customer support:\n"
+            "• **Basic Plan:** Standard business-hours email support.\n"
+            "• **Pro Plan:** 24/7 priority support across both email and chat."
+        )
+        sources = [
+            {"source": "company_policies.txt", "heading": "Support Policy"},
+        ]
+        return reply, sources
+
+    # 6. Resolution / 4K
+    if any(k in msg for k in ("4k", "resolution", "export quality", "can i export 4k", "720p")):
+        reply = (
+            "AutoStream supports up to **4K resolution** on the **Pro Plan** ($79/mo) with unlimited exports. "
+            "The **Basic Plan** ($29/mo) exports at up to **720p resolution** with 10 videos per month."
+        )
+        sources = [
+            {"source": "features.txt", "heading": "Pro Plan Features"},
+            {"source": "features.txt", "heading": "Basic Plan Features"},
+        ]
+        return reply, sources
+
+    # 7. AI Captions / Subtitles
+    if any(k in msg for k in ("caption", "subtitle", "ai caption", "transcription", "subtitles")):
+        reply = (
+            "AutoStream includes **AI-generated captions in multiple languages** as part of the **Pro Plan**. "
+            "It automatically transcribes speech, synchronizes subtitle timings, and renders customizable animated captions directly on your video."
+        )
+        sources = [
+            {"source": "features.txt", "heading": "Pro Plan Features"},
+        ]
+        return reply, sources
+
+    # 8. ROI Calculator Explanation
+    if any(k in msg for k in ("roi calculator", "how does the calculator work", "how is roi calculated", "hours saved")):
+        reply = (
+            "Our Video Editing ROI Calculator estimates your monthly time and cost savings. "
+            "By entering your weekly video count and average raw video length, it calculates the hours "
+            "AutoStream saves you by automating cuts, pauses, and captions, and recommends either the Basic or Pro tier."
+        )
+        sources = [
+            {"source": "features.txt", "heading": "Pro Plan Features"},
+        ]
+        return reply, sources
+
+    return None, None
+
+
 @log_node("rag_node")
 def rag_node(state: AgentState):
     """Answer questions using retrieved KB context, dynamically bridging back to lead collection if active."""
@@ -587,7 +721,7 @@ def rag_node(state: AgentState):
     already_captured = state.get("lead_captured", False)
     lead_in_progress = state.get("lead_in_progress", False)
 
-    # 1. Check for personal state queries first
+    # 1. Check for personal state queries first (e.g. 'what is my mail')
     state_reply = check_personal_state_query(user_message, lead_info, already_captured)
     if state_reply:
         return {
@@ -598,7 +732,7 @@ def rag_node(state: AgentState):
             "sources": [],
         }
 
-    # 2. Retrieve KB context
+    # 2. Retrieve KB context using FAISS vector store
     try:
         context, sources = retrieve_with_sources(user_message, k=3)
     except Exception as exc:
@@ -611,50 +745,58 @@ def rag_node(state: AgentState):
             "sources": [],
         }
 
-    if not context or not context.strip():
-        user_lower = user_message.lower()
-        if any(kw in user_lower for kw in ("team", "connect", "contact", "support", "help")):
-            fallback_text = "AutoStream provides 24/7 priority support for Enterprise customers and standard email support for Pro plan users."
-            sources = [{"source": "company_policies.txt", "heading": "Support Policy"}]
+    # 3. Fast Tier-1 Response Cache (Instant, 0 tokens used, 100% reliable)
+    cached_reply, cached_sources = get_cached_kb_response(user_message)
+    if cached_reply:
+        reply = cached_reply
+        if not sources and cached_sources:
+            sources = cached_sources
+    else:
+        # 4. If no exact cache match, verify relevance or invoke LLM (Tier 2: Gemini 2.5 Flash Lite)
+        if not context or not context.strip():
+            user_lower = user_message.lower()
+            if any(kw in user_lower for kw in ("team", "connect", "contact", "support", "help")):
+                fallback_text = "AutoStream provides 24/7 priority support for Pro plan users and standard email support for Basic plan users."
+                sources = [{"source": "company_policies.txt", "heading": "Support Policy"}]
+                return {
+                    "messages": [AIMessage(content=fallback_text)],
+                    "lead_info": lead_info,
+                    "lead_captured": already_captured,
+                    "lead_in_progress": lead_in_progress,
+                    "sources": sources,
+                }
             return {
-                "messages": [AIMessage(content=fallback_text)],
+                "messages": [AIMessage(content=OFF_TOPIC_REPLY)],
                 "lead_info": lead_info,
                 "lead_captured": already_captured,
                 "lead_in_progress": lead_in_progress,
-                "sources": sources,
+                "sources": [],
             }
-        return {
-            "messages": [AIMessage(content=OFF_TOPIC_REPLY)],
-            "lead_info": lead_info,
-            "lead_captured": already_captured,
-            "lead_in_progress": lead_in_progress,
-            "sources": [],
-        }
 
-    prompt = RAG_ANSWER_PROMPT.format(
-        context=context,
-        history=history,
-        user_message=user_message,
-    )
-    raw_reply = invoke_llm(prompt)
+        prompt = RAG_ANSWER_PROMPT.format(
+            context=context,
+            history=history,
+            user_message=user_message,
+        )
+        raw_reply = invoke_llm(prompt)
 
-    if not raw_reply:
-        clean_lines = [
-            line.strip("- ").strip() for line in context.split("\n")
-            if line.strip() and not line.startswith("[") and not line.startswith("---")
-        ]
-        if clean_lines:
-            reply = "Based on AutoStream documentation:\n" + "\n".join(f"• {line}" for line in clean_lines[:4])
-        else:
-            user_lower = user_message.lower()
-            if any(kw in user_lower for kw in ("team", "connect", "contact", "support")):
-                reply = "AutoStream provides 24/7 priority support for Enterprise customers and standard email support for Pro plan users. You can reach our team anytime via email or the support portal."
-            elif any(kw in user_lower for kw in ("price", "cost", "plan", "pro", "basic")):
-                reply = "AutoStream offers two main plans: Basic Plan ($29/month, 720p export, 10 templates) and Pro Plan ($79/month, 4K export, unlimited templates, 100GB storage)."
+        # 5. Tier 3: Polished conversational fallback if LLM is unreachable
+        if not raw_reply:
+            clean_lines = [
+                line.strip("- ").strip() for line in context.split("\n")
+                if line.strip() and not line.startswith("[") and not line.startswith("---")
+            ]
+            if clean_lines:
+                points = "\n".join(f"• {line}" for line in clean_lines[:4])
+                reply = f"Based on AutoStream documentation:\n{points}\n\nLet me know if you would like more details or want to get started!"
             else:
-                reply = "AutoStream is an automated AI video production engine featuring smart captioning, 4K export, custom templates, and Pro pricing starting at $79/month."
-    else:
-        reply = raw_reply
+                user_lower = user_message.lower()
+                if any(kw in user_lower for kw in ("price", "cost", "plan", "pro", "basic")):
+                    reply = "AutoStream offers two main plans: the Basic Plan at $29/month (up to 10 videos, 720p) and the Pro Plan at $79/month (unlimited videos, 4K, AI captions, 24/7 support)."
+                else:
+                    reply = "AutoStream is an automated AI video production platform featuring smart trimming, AI captions, 4K exports, and priority render queue."
+        else:
+            reply = raw_reply
 
     # Dynamic lead resumption if mid-lead-flow
     missing = [f for f in ("name", "email", "platform") if not lead_info.get(f)]
